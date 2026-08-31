@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-31
+
 ### Added
 
 - Daily clock sync (`enableDailyTimeSync`, on by default): the unit has no RTC or NTP client, so its internal clock free-runs and drifts, which throws off when the weekly schedule fires. Syncs the unit's clock to this computer's clock (`vallox.js`'s `getDeviceTime()`/`setDeviceTime()`) once at startup and once every 24h, and logs the drift each time.
@@ -39,5 +41,6 @@ Initial release.
 - Critical fault logging to the Homebridge log, and a HomeKit-visible `StatusFault` indicator on the main Fan service.
 - Support for multiple units on one Homebridge instance.
 
-[Unreleased]: https://github.com/simonarnell/homebridge-vallox-redux/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/simonarnell/homebridge-vallox-redux/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/simonarnell/homebridge-vallox-redux/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/simonarnell/homebridge-vallox-redux/releases/tag/v0.1.0
