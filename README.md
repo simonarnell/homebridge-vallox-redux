@@ -1,6 +1,6 @@
 # homebridge-vallox-redux
 
-Bring your [Vallox](https://www.vallox.com) MVHR unit into HomeKit: fan, temperatures, humidity, CO2, filter status, and profile switching. All device communication lives in [`vallox.js`](https://github.com/simonarnell/vallox.js); this plugin is the thin, typed Homebridge layer on top of it.
+Bring your [Vallox](https://www.vallox.com) MVHR unit into HomeKit: fan, temperatures, humidity, CO2, filter status, supply-air setpoint, fault indication, and profile switching. All device communication lives in [`vallox.js`](https://github.com/simonarnell/vallox.js); this plugin is the thin, typed Homebridge layer on top of it.
 
 Named "Redux" to sit alongside the existing [`homebridge-vallox`](https://github.com/awaescher/homebridge-vallox) plugin, not replace it, see the comparison below if you're choosing between them.
 
@@ -10,8 +10,8 @@ Named "Redux" to sit alongside the existing [`homebridge-vallox`](https://github
 |----------------------------------------|:---:|:---:|
 | Fan power + speed                      | ✅ | ✅ |
 | Temperature sensors (4x)               | ✅ | ✅ |
-| Humidity sensor                        | ✅ *(toggleable)* | ✅ |
-| CO2 sensor                             | ✅ *(toggleable)* | ❌ |
+| Humidity sensor                        | ✅ | ✅ |
+| CO2 sensor                             | ✅ | ❌ |
 | Filter change indication               | ✅ *(configurable threshold)* | ❌ |
 | Profile switches                       | Home / Away / Boost / Custom / Automatic | Away / Boost / Fireplace |
 | Multiple units on one Homebridge       | ✅ *(uncommon for MVHR, but supported)* | ❌ *(`singular` platform)* |
@@ -20,8 +20,7 @@ Named "Redux" to sit alongside the existing [`homebridge-vallox`](https://github
 | Critical fault logging                 | ✅ | ❌ |
 | Auto-detected model/firmware           | ✅ *(read from the unit, used as the default accessory name)* | ❌ |
 | Independent per-sensor room placement  | ✅ *(Supply/Outdoor/Exhaust are separate accessories)* | ❌ |
-| Eve app history graphs                 | ✅ *(toggleable, backfilled from the unit's own log)* | ❌ |
-| Language                               | TypeScript 7, strict | TypeScript |
+| Eve app history graphs                 | ✅ | ❌ |
 
 Nothing here is a knock on the original, it's a solid, minimal plugin. Redux exists because it targets a slightly wider slice of what a single unit and HAP can expose: more sensors, validated config, richer error handling, and Eve history, depth rather than breadth across many units, since most homes only ever have one.
 
@@ -41,7 +40,7 @@ Add a platform block to your Homebridge `config.json` (or configure via Homebrid
   "name": "Vallox Redux",
   "host": "192.168.1.100",
   "port": 80,
-  "pollingIntervalSeconds": 30,
+  "pollingIntervalSeconds":   30,
   "filterAlertDays": 14,
   "enableCo2Sensor": true,
   "enableHumiditySensor": true,
@@ -92,7 +91,7 @@ Custom mode is the only profile where the unit supports independent extract and 
 ## Limitations
 
 - WebSocket transport only, Modbus RTU (serial) units are not supported by this plugin.
-- The Fanv2 speed slider freezes at its last known value while the unit is in the Extra or Automatic profile, since the library has no fan-speed getter/setter for those profiles (Automatic adjusts fan speed itself). Custom mode is fully controllable — see "Custom mode's dual fan speed" below.
+- The Fanv2 speed slider freezes at its last known value while the unit is in the Extra or Automatic profile: the unit has no fan-speed setting for Extra/Programmable mode (only enable/duration timer registers), and Automatic adjusts fan speed itself. Custom mode is fully controllable — see "Custom mode's dual fan speed" below.
 - CO2 is not part of the Eve history graph. Both of Eve's multi-metric graph types were tried (`'room'`'s `ppm` field, and `'room2'`'s `voc` field with CO2 fed into it), including a full remove-and-re-pair to rule out Eve caching a stale accessory-type declaration, and neither produced a graph, just a live reading with no history line. CO2 stays available as a live CarbonDioxideSensor reading; it just isn't graphed.
 - Eve history backfill is capped at the 500 most recent entries per accessory. `fakegato-history` triggers a full disk rewrite of an accessory's entire history buffer on every single entry added during backfill; seeding the unit's full multi-month log (thousands of entries) across several accessories at once is enough real CPU/GC work to exhaust Node's heap. Live polling fills in the rest over time regardless.
 

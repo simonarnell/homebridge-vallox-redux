@@ -30,6 +30,13 @@
   },
   "author": "Simon Arnell",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/simonarnell/homebridge-vallox-redux/issues"
+  },
+  "homepage": "https://github.com/simonarnell/homebridge-vallox-redux#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "ajv": "^8.20.0",
     "fakegato-history": "^0.6.7",
