@@ -74,7 +74,7 @@ jest.unstable_mockModule('vallox.js', () => {
     }
   }
 
-  const Profile = { NONE: 0, HOME: 1, AWAY: 2, BOOST: 3, FIREPLACE: 4, EXTRA: 5 } as const
+  const Profile = { NONE: 0, HOME: 1, AWAY: 2, BOOST: 3, FIREPLACE: 4, CUSTOM: 4, EXTRA: 5, AUTOMATIC: 6 } as const
   const HistoryChannel = {
     EXTRACT_AIR_TEMP: 0,
     EXHAUST_AIR_TEMP: 1,

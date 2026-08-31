@@ -26,8 +26,8 @@ describe('attachProfileSwitches', () => {
   it('creates one Switch service per switchable profile', () => {
     attachProfileSwitches(platform as any, accessory as any, client as any, () => Profile.HOME, onMutated)
     const switches = accessory.services.filter((s) => s.UUID === 'Switch')
-    expect(switches).toHaveLength(4)
-    expect(switches.map((s) => s.displayName).sort()).toEqual(['Away', 'Boost', 'Fireplace', 'Home'])
+    expect(switches).toHaveLength(5)
+    expect(switches.map((s) => s.displayName).sort()).toEqual(['Automatic', 'Away', 'Boost', 'Custom', 'Home'])
   })
 
   it('reports On for the currently active profile only', async () => {
@@ -75,12 +75,21 @@ describe('attachProfileSwitches', () => {
 
   it('updateFromPoll() reflects the polled profile across all switches', () => {
     const controller = attachProfileSwitches(platform as any, accessory as any, client as any, () => Profile.NONE, onMutated)
-    controller.updateFromPoll(Profile.FIREPLACE)
+    controller.updateFromPoll(Profile.CUSTOM)
 
-    const fireplace = accessory.getServiceById({ UUID: 'Switch' } as any, 'profile-fireplace')!
+    const custom = accessory.getServiceById({ UUID: 'Switch' } as any, 'profile-fireplace')!
     const away = accessory.getServiceById({ UUID: 'Switch' } as any, 'profile-away')!
-    expect(fireplace.getCharacteristic(FakeCharacteristic.On).value).toBe(true)
+    expect(custom.getCharacteristic(FakeCharacteristic.On).value).toBe(true)
     expect(away.getCharacteristic(FakeCharacteristic.On).value).toBe(false)
+  })
+
+  it('creates an Automatic switch that calls client.setProfile(Profile.AUTOMATIC)', async () => {
+    attachProfileSwitches(platform as any, accessory as any, client as any, () => Profile.HOME, onMutated)
+    const automatic = accessory.getServiceById({ UUID: 'Switch' } as any, 'profile-automatic')!
+
+    await automatic.getCharacteristic(FakeCharacteristic.On).triggerSet(true)
+
+    expect(client.setProfile).toHaveBeenCalledWith(Profile.AUTOMATIC)
   })
 
   it('wraps a ValidationError from the client into a HapStatusError', async () => {

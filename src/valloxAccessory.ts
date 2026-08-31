@@ -165,16 +165,20 @@ interface Satellite {
 
 export class ValloxAccessory {
   private readonly fanService: Service
+  private readonly customSupplyFanService: Service
   private readonly extractTempService: Service
   private readonly humidityService?: Service
   private readonly co2Service?: Service
   private readonly filterService: Service
+  private readonly supplyThermostatService: Service
   private readonly profileSwitches: ProfileSwitchesController
   private readonly history?: FakeGatoHistoryService
   private readonly satellites: Satellite[]
 
   private lastKnownProfile: Profile = Profile.NONE
   private lastKnownFanPct = 0
+  private lastKnownCustomSupplyFanPct = 0
+  private lastKnownSupplyTempSetpoint = 18
   private pollHandle?: NodeJS.Timeout
 
   constructor(
@@ -198,6 +202,7 @@ export class ValloxAccessory {
       .setCharacteristic(this.platform.Characteristic.FirmwareRevision, firmwareVersion ?? '0.0.0')
 
     this.fanService = this.setupFan()
+    this.customSupplyFanService = this.setupCustomSupplyFan()
     this.pruneStaleTempSensors(this.accessory, ['extract'])
     this.extractTempService = this.setupTempSensor(this.accessory, 'Extract Air', 'extract', 'extractAirTemp')
 
@@ -219,6 +224,8 @@ export class ValloxAccessory {
       const history = enableEveHistory ? this.setupEveHistoryService(satAccessory, 'room') : undefined
       return { spec, accessory: satAccessory, tempService, history }
     })
+
+    this.supplyThermostatService = this.setupSupplyTempSetpoint(supplyAccessory)
 
     if (enableEveHistory) {
       this.history = this.setupEveHistoryService(this.accessory, 'room')
@@ -303,9 +310,12 @@ export class ValloxAccessory {
     return service
   }
 
-  private setupFan(): Service {
-    const service = this.getOrAddService(this.accessory, this.platform.Service.Fanv2, 'Vallox Fan', 'fan')
-
+  /**
+   * Wires Active (on/off) identically for any Fanv2 service on this accessory — both the main fan
+   * and the Custom Supply fan are just two control surfaces onto the same physical unit's single
+   * power state, so turning either one on/off does the same powerOn()/powerOff().
+   */
+  private wireFanActive(service: Service): void {
     service
       .getCharacteristic(this.platform.Characteristic.Active)
       .onGet(() => this.wrap(async () => ((await this.client.isPoweredOn()) ? 1 : 0)))
@@ -319,6 +329,16 @@ export class ValloxAccessory {
           void this.pollOnce()
         }),
       )
+  }
+
+  private setupFan(): Service {
+    const service = this.getOrAddService(this.accessory, this.platform.Service.Fanv2, 'Vallox Fan', 'fan')
+
+    this.wireFanActive(service)
+
+    // Standard optional HAP characteristic for reporting a general problem on this service —
+    // driven by client.getCriticalFaultActive() during polling (see pollOnce).
+    service.getCharacteristic(this.platform.Characteristic.StatusFault)
 
     service
       .getCharacteristic(this.platform.Characteristic.RotationSpeed)
@@ -337,12 +357,52 @@ export class ValloxAccessory {
             case Profile.BOOST:
               await this.client.setBoostFanSpeed(pct)
               break
+            case Profile.CUSTOM:
+              // Custom has independently settable extract/supply speeds; the main fan's
+              // RotationSpeed controls the extract side (paired with this accessory's own
+              // Extract Air sensor) — see setupCustomSupplyFan() for the supply side.
+              await this.client.setCustomExtractFanSpeed(pct)
+              break
             default:
               this.platform.log.debug(
                 `RotationSpeed set ignored: no fan-speed setter for profile ${this.lastKnownProfile}`,
               )
               return
           }
+          void this.pollOnce()
+        }),
+      )
+
+    return service
+  }
+
+  /**
+   * A second Fanv2 service exposing Custom mode's independently-settable supply-side fan speed
+   * (client.getCustomSupplyFanSpeed/setCustomSupplyFanSpeed) — HomeKit's RotationSpeed is a single
+   * number, so Custom's extract/supply split needs two Fanv2 services rather than one. Active
+   * mirrors the main fan's power state since both are the same physical unit.
+   */
+  private setupCustomSupplyFan(): Service {
+    const service = this.getOrAddService(
+      this.accessory,
+      this.platform.Service.Fanv2,
+      'Custom Supply Fan',
+      'fan-custom-supply',
+    )
+
+    this.wireFanActive(service)
+
+    service
+      .getCharacteristic(this.platform.Characteristic.RotationSpeed)
+      .setProps({ minStep: 1 })
+      .onGet(() => this.lastKnownCustomSupplyFanPct)
+      .onSet((value: CharacteristicValue) =>
+        this.wrap(async () => {
+          if (this.lastKnownProfile !== Profile.CUSTOM) {
+            this.platform.log.debug('Custom Supply Fan RotationSpeed set ignored: unit is not in Custom profile')
+            return
+          }
+          await this.client.setCustomSupplyFanSpeed(Math.round(value as number))
           void this.pollOnce()
         }),
       )
@@ -395,6 +455,71 @@ export class ValloxAccessory {
             : this.platform.Characteristic.CarbonDioxideDetected.CO2_LEVELS_NORMAL
         }),
       )
+
+    return service
+  }
+
+  /**
+   * A Thermostat service on the Supply Air satellite accessory, repurposed purely for its
+   * TargetTemperature/CurrentTemperature characteristics — HAP has no plain "setpoint" service.
+   * TargetHeatingCoolingState is pinned to HEAT (the unit doesn't heat/cool; this just satisfies
+   * the service's required characteristics and stops Home offering an Off/Cool/Auto the unit
+   * doesn't support). TargetTemperature mirrors whichever profile is currently active, the same
+   * way the main fan's RotationSpeed already does.
+   */
+  private setupSupplyTempSetpoint(satAccessory: PlatformAccessory<ValloxAccessoryContext>): Service {
+    const service = this.getOrAddService(
+      satAccessory,
+      this.platform.Service.Thermostat,
+      'Supply Air Setpoint',
+      'supply-setpoint',
+    )
+
+    service
+      .getCharacteristic(this.platform.Characteristic.CurrentTemperature)
+      .onGet(() => this.wrap(async () => (await this.client.getSensorReadings()).supplyAirTemp))
+
+    service
+      .getCharacteristic(this.platform.Characteristic.TargetTemperature)
+      .onGet(() => this.lastKnownSupplyTempSetpoint)
+      .onSet((value: CharacteristicValue) =>
+        this.wrap(async () => {
+          const celsius = value as number
+          switch (this.lastKnownProfile) {
+            case Profile.HOME:
+              await this.client.setHomeSupplyTemp(celsius)
+              break
+            case Profile.AWAY:
+              await this.client.setAwaySupplyTemp(celsius)
+              break
+            case Profile.BOOST:
+              await this.client.setBoostSupplyTemp(celsius)
+              break
+            case Profile.CUSTOM:
+              await this.client.setCustomSupplyTemp(celsius)
+              break
+            default:
+              this.platform.log.debug(
+                `TargetTemperature set ignored: no supply-temp setter for profile ${this.lastKnownProfile}`,
+              )
+              return
+          }
+          void this.pollOnce()
+        }),
+      )
+
+    service
+      .getCharacteristic(this.platform.Characteristic.TargetHeatingCoolingState)
+      .setProps({ validValues: [this.platform.Characteristic.TargetHeatingCoolingState.HEAT] })
+      .onGet(() => this.platform.Characteristic.TargetHeatingCoolingState.HEAT)
+
+    service
+      .getCharacteristic(this.platform.Characteristic.CurrentHeatingCoolingState)
+      .onGet(() => this.platform.Characteristic.CurrentHeatingCoolingState.HEAT)
+
+    service
+      .getCharacteristic(this.platform.Characteristic.TemperatureDisplayUnits)
+      .onGet(() => this.platform.Characteristic.TemperatureDisplayUnits.CELSIUS)
 
     return service
   }
@@ -480,22 +605,50 @@ export class ValloxAccessory {
 
   private async pollOnce(): Promise<void> {
     try {
-      const [powered, profile, readings, co2Threshold, filterDays] = await Promise.all([
+      const [powered, profile, readings, co2Threshold, filterDays, criticalFault] = await Promise.all([
         this.client.isPoweredOn(),
         this.client.getProfile(),
         this.client.getSensorReadings(),
         this.client.getCo2Threshold(),
         this.client.getFilterDaysRemaining(),
+        this.client.getCriticalFaultActive(),
       ])
 
       this.lastKnownProfile = profile
-      if (profile === Profile.HOME || profile === Profile.AWAY || profile === Profile.BOOST) {
+      if (profile === Profile.HOME || profile === Profile.AWAY || profile === Profile.BOOST || profile === Profile.CUSTOM) {
         this.lastKnownFanPct = await this.fanSpeedForProfile(profile)
+        this.lastKnownSupplyTempSetpoint = await this.supplyTempForProfile(profile)
       }
-      // FIREPLACE/EXTRA/NONE: no fan-speed getter/setter exists — freeze at last known value.
+      // EXTRA/AUTOMATIC/NONE: no fan-speed/supply-temp getter/setter exists — freeze at last known value.
+
+      if (profile === Profile.CUSTOM) {
+        this.lastKnownCustomSupplyFanPct = await this.client.getCustomSupplyFanSpeed()
+      }
+      // Only Custom has an independently-settable supply-side fan speed; freeze otherwise.
 
       this.fanService.updateCharacteristic(this.platform.Characteristic.Active, powered ? 1 : 0)
       this.fanService.updateCharacteristic(this.platform.Characteristic.RotationSpeed, this.lastKnownFanPct)
+      this.fanService.updateCharacteristic(
+        this.platform.Characteristic.StatusFault,
+        criticalFault
+          ? this.platform.Characteristic.StatusFault.GENERAL_FAULT
+          : this.platform.Characteristic.StatusFault.NO_FAULT,
+      )
+
+      this.customSupplyFanService.updateCharacteristic(this.platform.Characteristic.Active, powered ? 1 : 0)
+      this.customSupplyFanService.updateCharacteristic(
+        this.platform.Characteristic.RotationSpeed,
+        this.lastKnownCustomSupplyFanPct,
+      )
+
+      this.supplyThermostatService.updateCharacteristic(
+        this.platform.Characteristic.CurrentTemperature,
+        readings.supplyAirTemp,
+      )
+      this.supplyThermostatService.updateCharacteristic(
+        this.platform.Characteristic.TargetTemperature,
+        this.lastKnownSupplyTempSetpoint,
+      )
 
       this.extractTempService.updateCharacteristic(
         this.platform.Characteristic.CurrentTemperature,
@@ -544,8 +697,7 @@ export class ValloxAccessory {
         humidity: readings.humidity,
       })
 
-      const critical = await this.client.getCriticalFaultActive()
-      if (critical) {
+      if (criticalFault) {
         const faults = await this.client.getFaults()
         this.platform.log.warn('Vallox reports a critical fault active:', faults.filter((f) => f.isActive))
       }
@@ -562,15 +714,33 @@ export class ValloxAccessory {
   }
 
   private fanSpeedForProfile(
-    profile: typeof Profile.HOME | typeof Profile.AWAY | typeof Profile.BOOST,
+    profile: typeof Profile.HOME | typeof Profile.AWAY | typeof Profile.BOOST | typeof Profile.CUSTOM,
   ): Promise<number> {
     switch (profile) {
       case Profile.HOME:
         return this.client.getHomeFanSpeed()
       case Profile.AWAY:
         return this.client.getAwayFanSpeed()
-      default:
+      case Profile.BOOST:
         return this.client.getBoostFanSpeed()
+      default:
+        // Custom's main (extract-side) speed — see setupFan()'s RotationSpeed handler.
+        return this.client.getCustomExtractFanSpeed()
+    }
+  }
+
+  private supplyTempForProfile(
+    profile: typeof Profile.HOME | typeof Profile.AWAY | typeof Profile.BOOST | typeof Profile.CUSTOM,
+  ): Promise<number> {
+    switch (profile) {
+      case Profile.HOME:
+        return this.client.getHomeSupplyTemp()
+      case Profile.AWAY:
+        return this.client.getAwaySupplyTemp()
+      case Profile.BOOST:
+        return this.client.getBoostSupplyTemp()
+      default:
+        return this.client.getCustomSupplyTemp()
     }
   }
 

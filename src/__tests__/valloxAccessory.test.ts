@@ -31,9 +31,21 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
     getHomeFanSpeed: jest.fn(async () => 50),
     getAwayFanSpeed: jest.fn(async () => 30),
     getBoostFanSpeed: jest.fn(async () => 80),
+    getCustomExtractFanSpeed: jest.fn(async () => 40),
+    getCustomSupplyFanSpeed: jest.fn(async () => 45),
     setHomeFanSpeed: jest.fn(async (_pct: number) => {}),
     setAwayFanSpeed: jest.fn(async (_pct: number) => {}),
     setBoostFanSpeed: jest.fn(async (_pct: number) => {}),
+    setCustomExtractFanSpeed: jest.fn(async (_pct: number) => {}),
+    setCustomSupplyFanSpeed: jest.fn(async (_pct: number) => {}),
+    getHomeSupplyTemp: jest.fn(async () => 18),
+    getAwaySupplyTemp: jest.fn(async () => 16),
+    getBoostSupplyTemp: jest.fn(async () => 20),
+    getCustomSupplyTemp: jest.fn(async () => 22),
+    setHomeSupplyTemp: jest.fn(async (_celsius: number) => {}),
+    setAwaySupplyTemp: jest.fn(async (_celsius: number) => {}),
+    setBoostSupplyTemp: jest.fn(async (_celsius: number) => {}),
+    setCustomSupplyTemp: jest.fn(async (_celsius: number) => {}),
     setProfile: jest.fn(async (_profile: Profile) => {}),
     clearTimedModes: jest.fn(async () => {}),
     getCriticalFaultActive: jest.fn(async () => false),
@@ -203,7 +215,7 @@ describe('ValloxAccessory', () => {
     })
 
     it('ignores a RotationSpeed write while in a profile with no fan-speed setter', async () => {
-      harness = await build({}, { getProfile: jest.fn(async () => Profile.FIREPLACE) })
+      harness = await build({}, { getProfile: jest.fn(async () => Profile.EXTRA) })
       const speed = harness.accessory
         .getServiceById(FakeServiceType.Fanv2, 'fan')!
         .getCharacteristic(FakeCharacteristic.RotationSpeed)
@@ -212,6 +224,103 @@ describe('ValloxAccessory', () => {
       expect(harness.client.setHomeFanSpeed).not.toHaveBeenCalled()
       expect(harness.client.setAwayFanSpeed).not.toHaveBeenCalled()
       expect(harness.client.setBoostFanSpeed).not.toHaveBeenCalled()
+      expect(harness.client.setCustomExtractFanSpeed).not.toHaveBeenCalled()
+    })
+
+    it('routes RotationSpeed to the Custom extract-side setter while Custom is active', async () => {
+      harness = await build({}, { getProfile: jest.fn(async () => Profile.CUSTOM) })
+      const speed = harness.accessory
+        .getServiceById(FakeServiceType.Fanv2, 'fan')!
+        .getCharacteristic(FakeCharacteristic.RotationSpeed)
+
+      await speed.triggerSet(66)
+      expect(harness.client.setCustomExtractFanSpeed).toHaveBeenCalledWith(66)
+    })
+  })
+
+  describe('custom supply fan', () => {
+    it('Active mirrors the main fan power state', async () => {
+      harness = await build()
+      const active = harness.accessory
+        .getServiceById(FakeServiceType.Fanv2, 'fan-custom-supply')!
+        .getCharacteristic(FakeCharacteristic.Active)
+      await expect(active.triggerGet()).resolves.toBe(1)
+    })
+
+    it('routes RotationSpeed to setCustomSupplyFanSpeed while Custom is active', async () => {
+      harness = await build({}, { getProfile: jest.fn(async () => Profile.CUSTOM) })
+      const speed = harness.accessory
+        .getServiceById(FakeServiceType.Fanv2, 'fan-custom-supply')!
+        .getCharacteristic(FakeCharacteristic.RotationSpeed)
+
+      await speed.triggerSet(70)
+      expect(harness.client.setCustomSupplyFanSpeed).toHaveBeenCalledWith(70)
+    })
+
+    it('ignores a RotationSpeed write while not in Custom profile', async () => {
+      harness = await build()
+      const speed = harness.accessory
+        .getServiceById(FakeServiceType.Fanv2, 'fan-custom-supply')!
+        .getCharacteristic(FakeCharacteristic.RotationSpeed)
+
+      await expect(speed.triggerSet(70)).resolves.toBeUndefined()
+      expect(harness.client.setCustomSupplyFanSpeed).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('supply air setpoint (Thermostat)', () => {
+    it('CurrentTemperature reports the live supply air reading', async () => {
+      harness = await build()
+      const current = harness.supply
+        .getServiceById(FakeServiceType.Thermostat, 'supply-setpoint')!
+        .getCharacteristic(FakeCharacteristic.CurrentTemperature)
+      await expect(current.triggerGet()).resolves.toBe(19)
+    })
+
+    it('TargetTemperature routes to the setter for the currently active profile', async () => {
+      harness = await build()
+      const target = harness.supply
+        .getServiceById(FakeServiceType.Thermostat, 'supply-setpoint')!
+        .getCharacteristic(FakeCharacteristic.TargetTemperature)
+
+      await target.triggerSet(21)
+      expect(harness.client.setHomeSupplyTemp).toHaveBeenCalledWith(21)
+    })
+
+    it('ignores a TargetTemperature write while in a profile with no setpoint setter', async () => {
+      harness = await build({}, { getProfile: jest.fn(async () => Profile.AUTOMATIC) })
+      const target = harness.supply
+        .getServiceById(FakeServiceType.Thermostat, 'supply-setpoint')!
+        .getCharacteristic(FakeCharacteristic.TargetTemperature)
+
+      await expect(target.triggerSet(21)).resolves.toBeUndefined()
+      expect(harness.client.setHomeSupplyTemp).not.toHaveBeenCalled()
+    })
+
+    it('TargetHeatingCoolingState is pinned to HEAT', async () => {
+      harness = await build()
+      const state = harness.supply
+        .getServiceById(FakeServiceType.Thermostat, 'supply-setpoint')!
+        .getCharacteristic(FakeCharacteristic.TargetHeatingCoolingState)
+      await expect(state.triggerGet()).resolves.toBe(FakeCharacteristic.TargetHeatingCoolingState.HEAT)
+    })
+  })
+
+  describe('fault indication', () => {
+    it('StatusFault is NO_FAULT when no critical fault is active', async () => {
+      harness = await build()
+      const fault = harness.accessory
+        .getServiceById(FakeServiceType.Fanv2, 'fan')!
+        .getCharacteristic(FakeCharacteristic.StatusFault)
+      expect(fault.value).toBe(FakeCharacteristic.StatusFault.NO_FAULT)
+    })
+
+    it('StatusFault flips to GENERAL_FAULT when a critical fault is active', async () => {
+      harness = await build({}, { getCriticalFaultActive: jest.fn(async () => true) })
+      const fault = harness.accessory
+        .getServiceById(FakeServiceType.Fanv2, 'fan')!
+        .getCharacteristic(FakeCharacteristic.StatusFault)
+      expect(fault.value).toBe(FakeCharacteristic.StatusFault.GENERAL_FAULT)
     })
   })
 

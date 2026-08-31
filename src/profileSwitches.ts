@@ -7,7 +7,12 @@ const SWITCHABLE_PROFILES = [
   { profile: Profile.HOME, subtype: 'profile-home', name: 'Home' },
   { profile: Profile.AWAY, subtype: 'profile-away', name: 'Away' },
   { profile: Profile.BOOST, subtype: 'profile-boost', name: 'Boost' },
-  { profile: Profile.FIREPLACE, subtype: 'profile-fireplace', name: 'Fireplace' },
+  // Subtype stays 'profile-fireplace' (not 'profile-custom') even though the switch is now
+  // labeled "Custom": Profile.CUSTOM and Profile.FIREPLACE are the same value (4, see vallox.js's
+  // Profile doc comment), and changing the subtype would orphan the existing cached HomeKit
+  // service, leaving a stale duplicate switch behind until manually removed.
+  { profile: Profile.CUSTOM, subtype: 'profile-fireplace', name: 'Custom' },
+  { profile: Profile.AUTOMATIC, subtype: 'profile-automatic', name: 'Automatic' },
 ] as const
 
 export interface ProfileSwitchesController {

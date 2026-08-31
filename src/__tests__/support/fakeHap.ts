@@ -39,6 +39,26 @@ export const FakeCharacteristic = {
     CHANGE_FILTER: 1,
   }),
   On: characteristicDef('On'),
+  StatusFault: characteristicDef('StatusFault', {
+    NO_FAULT: 0,
+    GENERAL_FAULT: 1,
+  }),
+  TargetTemperature: characteristicDef('TargetTemperature'),
+  TargetHeatingCoolingState: characteristicDef('TargetHeatingCoolingState', {
+    OFF: 0,
+    HEAT: 1,
+    COOL: 2,
+    AUTO: 3,
+  }),
+  CurrentHeatingCoolingState: characteristicDef('CurrentHeatingCoolingState', {
+    OFF: 0,
+    HEAT: 1,
+    COOL: 2,
+  }),
+  TemperatureDisplayUnits: characteristicDef('TemperatureDisplayUnits', {
+    CELSIUS: 0,
+    FAHRENHEIT: 1,
+  }),
 } as const
 
 export interface ServiceDef {
@@ -58,6 +78,7 @@ export const FakeServiceType = {
   CarbonDioxideSensor: serviceDef('CarbonDioxideSensor'),
   FilterMaintenance: serviceDef('FilterMaintenance'),
   Switch: serviceDef('Switch'),
+  Thermostat: serviceDef('Thermostat'),
 } as const
 
 type GetHandler = () => unknown | Promise<unknown>
