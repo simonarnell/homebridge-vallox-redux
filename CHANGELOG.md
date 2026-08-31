@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Daily clock sync (`enableDailyTimeSync`, on by default): the unit has no RTC or NTP client, so its internal clock free-runs and drifts, which throws off when the weekly schedule fires. Syncs the unit's clock to this computer's clock (`vallox.js`'s `getDeviceTime()`/`setDeviceTime()`) once at startup and once every 24h, and logs the drift each time.
+- `co2AlertPpm` config option (default `1000`), controlling the HomeKit CO2 alert threshold independently of the unit's own auto-boost trigger.
+
+### Changed
+
+- `vallox.js` bumped to `^1.7.1`, correcting several `FAULT_DESCRIPTIONS` entries against the unit's actual firmware text — affects the fault descriptions this plugin logs when `getCriticalFaultActive()`/`getFaults()` reports an active fault.
+
+### Fixed
+
+- The CO2 sensor's `CarbonDioxideDetected` characteristic (which iOS uses to push a device notification) was driven by the unit's own auto-boost trigger threshold (`getCo2Threshold()`, typically ~800ppm and tuned to kick the fan up proactively), not a health-relevant "this needs attention" level — a routine, brief boost-range reading paged a phone as if it were a real air-quality problem. Now uses the new `co2AlertPpm` config option (default 1000ppm) instead, entirely independent of the device's own boost threshold.
+
 ## [0.1.0] - 2026-08-31
 
 Initial release.

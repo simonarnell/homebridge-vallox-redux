@@ -42,9 +42,11 @@ Add a platform block to your Homebridge `config.json` (or configure via Homebrid
   "port": 80,
   "pollingIntervalSeconds":   30,
   "filterAlertDays": 14,
+  "co2AlertPpm": 1000,
   "enableCo2Sensor": true,
   "enableHumiditySensor": true,
-  "enableEveHistory": false
+  "enableEveHistory": false,
+  "enableDailyTimeSync": true
 }
 ```
 
@@ -55,9 +57,11 @@ Add a platform block to your Homebridge `config.json` (or configure via Homebrid
 | `name` | *(auto-detected model, e.g. "Vallox 110 MV")* | Override the main accessory's display name |
 | `pollingIntervalSeconds` | `30` | How often to poll the unit for state |
 | `filterAlertDays` | `14` | Days remaining threshold below which HomeKit shows "Change Filter" |
+| `co2AlertPpm` | `1000` | CO2 level (ppm) at which HomeKit's CarbonDioxideDetected flips to abnormal and pushes a device alert. Independent of the unit's own auto-boost trigger threshold (typically lower, and not user-configurable from this plugin) — see Limitations. |
 | `enableCo2Sensor` | `true` | Expose a CO2 sensor accessory |
 | `enableHumiditySensor` | `true` | Expose a humidity sensor accessory |
 | `enableEveHistory` | `false` | Log temp/humidity to Eve app history graphs |
+| `enableDailyTimeSync` | `true` | Sync the unit's clock to this computer's clock at startup and once every 24h |
 
 Every field is checked against a strict schema at startup, a typo'd `port` or a missing `host` fails fast with a specific error in the Homebridge log, rather than a mysterious runtime crash.
 
@@ -77,12 +81,13 @@ Rather than one accessory carrying every sensor, this plugin splits the unit's f
 - **Supply air setpoint** (`Thermostat`, on the Supply Air accessory) — `TargetTemperature` reads/writes the supply-air setpoint for whichever profile (Home/Away/Boost/Custom) is currently active; `CurrentTemperature` reports the live supply air reading. `TargetHeatingCoolingState` is pinned to Heat — the unit doesn't heat or cool, this just repurposes HomeKit's Thermostat service for setpoint control, since HAP has no plain "target number" service.
 - **Temperature sensors** — Supply, Extract, Outdoor, and Exhaust air temperature
 - **Humidity sensor** — extract air relative humidity
-- **CO2 sensor** — level (ppm) and threshold-based detected state (live reading only, see Limitations for why it isn't part of the Eve history graph)
+- **CO2 sensor** — level (ppm) and threshold-based detected state, using the plugin's own `co2AlertPpm` config (default 1000ppm) rather than the unit's lower auto-boost trigger threshold — see Limitations. Live reading only, see Limitations also for why it isn't part of the Eve history graph.
 - **Filter maintenance** — "Change Filter" indication based on days remaining
 - **Profile switches** — Home / Away / Boost / Custom / Automatic, reflecting and controlling the active profile
 - **Fault logging** — `getCriticalFaultActive()`/`getFaults()` are polled and logged to the Homebridge log, and surfaced in HomeKit via the main Fan's `StatusFault` characteristic
 - **Model/firmware detection** — the unit's model (e.g. "Vallox 110 MV") and firmware version are read at startup and used for the main accessory's default name and its HomeKit Model/FirmwareRevision characteristics
 - **Eve app history** *(opt-in)* — temperature (and humidity, on the main accessory) graphs in the Eve app, backfilled at startup from the unit's own on-device log (most recent 500 entries per accessory) rather than starting empty. Eve-only, these graphs don't appear in the stock Home app or other HomeKit clients.
+- **Daily clock sync** *(on by default)* — the unit has no RTC or NTP client, so its internal clock free-runs and drifts; this syncs it to this computer's clock at startup and once every 24h, keeping the weekly schedule firing at the right hour.
 
 ### Custom mode's dual fan speed
 
@@ -92,6 +97,7 @@ Custom mode is the only profile where the unit supports independent extract and 
 
 - WebSocket transport only, Modbus RTU (serial) units are not supported by this plugin.
 - The Fanv2 speed slider freezes at its last known value while the unit is in the Extra or Automatic profile: the unit has no fan-speed setting for Extra/Programmable mode (only enable/duration timer registers), and Automatic adjusts fan speed itself. Custom mode is fully controllable — see "Custom mode's dual fan speed" below.
+- The unit's own CO2 auto-boost trigger threshold (read via `vallox.js`'s `getCo2Threshold()`) is not exposed or configurable through this plugin — it's a device-level setting, separate from the `co2AlertPpm` HomeKit alert threshold above. Change it via the unit's own web UI/app if needed.
 - CO2 is not part of the Eve history graph. Both of Eve's multi-metric graph types were tried (`'room'`'s `ppm` field, and `'room2'`'s `voc` field with CO2 fed into it), including a full remove-and-re-pair to rule out Eve caching a stale accessory-type declaration, and neither produced a graph, just a live reading with no history line. CO2 stays available as a live CarbonDioxideSensor reading; it just isn't graphed.
 - Eve history backfill is capped at the 500 most recent entries per accessory. `fakegato-history` triggers a full disk rewrite of an accessory's entire history buffer on every single entry added during backfill; seeding the unit's full multi-month log (thousands of entries) across several accessories at once is enough real CPU/GC work to exhaust Node's heap. Live polling fills in the rest over time regardless.
 

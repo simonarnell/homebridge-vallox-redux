@@ -26,7 +26,6 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
     powerOff: jest.fn(async () => {}),
     getProfile: jest.fn(async () => Profile.HOME),
     getSensorReadings: jest.fn(async () => ({ ...DEFAULT_READINGS })),
-    getCo2Threshold: jest.fn(async () => 900),
     getFilterDaysRemaining: jest.fn(async () => 100),
     getHomeFanSpeed: jest.fn(async () => 50),
     getAwayFanSpeed: jest.fn(async () => 30),
@@ -50,6 +49,8 @@ function fakeClient(overrides: Record<string, unknown> = {}) {
     clearTimedModes: jest.fn(async () => {}),
     getCriticalFaultActive: jest.fn(async () => false),
     getFaults: jest.fn(async () => []),
+    getDeviceTime: jest.fn(async () => new Date()),
+    setDeviceTime: jest.fn(async (_date: Date) => {}),
     ...overrides,
   }
 }
@@ -105,7 +106,9 @@ async function build(
 
 /** Every test starts a real setInterval poll loop; always clear it so Jest can exit cleanly. */
 function stopPolling(h: Harness): void {
-  clearInterval((h.instance as unknown as { pollHandle?: NodeJS.Timeout }).pollHandle)
+  const internals = h.instance as unknown as { pollHandle?: NodeJS.Timeout; timeSyncHandle?: NodeJS.Timeout }
+  clearInterval(internals.pollHandle)
+  clearInterval(internals.timeSyncHandle)
 }
 
 describe('ValloxAccessory', () => {
@@ -380,16 +383,35 @@ describe('ValloxAccessory', () => {
       await expect(humidity.triggerGet()).resolves.toBe(42)
     })
 
-    it('CO2 detected state flips to abnormal at/above the threshold', async () => {
-      harness = await build({}, { getCo2Threshold: jest.fn(async () => 600) })
+    it('CO2 detected state flips to abnormal at/above the configured co2AlertPpm', async () => {
+      harness = await build({ co2AlertPpm: 600 })
       const co2Service = harness.accessory.getServiceById(FakeServiceType.CarbonDioxideSensor, 'co2')!
       const detected = co2Service.getCharacteristic(FakeCharacteristic.CarbonDioxideDetected)
       // DEFAULT_READINGS.co2 = 650 >= 600
       await expect(detected.triggerGet()).resolves.toBe(FakeCharacteristic.CarbonDioxideDetected.CO2_LEVELS_ABNORMAL)
     })
 
-    it('CO2 detected state stays normal below the threshold', async () => {
-      harness = await build({}, { getCo2Threshold: jest.fn(async () => 900) })
+    it('CO2 detected state stays normal below the configured co2AlertPpm', async () => {
+      harness = await build({ co2AlertPpm: 900 })
+      const co2Service = harness.accessory.getServiceById(FakeServiceType.CarbonDioxideSensor, 'co2')!
+      const detected = co2Service.getCharacteristic(FakeCharacteristic.CarbonDioxideDetected)
+      await expect(detected.triggerGet()).resolves.toBe(FakeCharacteristic.CarbonDioxideDetected.CO2_LEVELS_NORMAL)
+    })
+
+    it('defaults co2AlertPpm to 1000, well above the unit\'s own boost-trigger threshold', async () => {
+      harness = await build()
+      const co2Service = harness.accessory.getServiceById(FakeServiceType.CarbonDioxideSensor, 'co2')!
+      const detected = co2Service.getCharacteristic(FakeCharacteristic.CarbonDioxideDetected)
+      // DEFAULT_READINGS.co2 = 650, well below the 1000ppm default alert threshold.
+      await expect(detected.triggerGet()).resolves.toBe(FakeCharacteristic.CarbonDioxideDetected.CO2_LEVELS_NORMAL)
+    })
+
+    it('ignores the unit\'s own auto-boost CO2 threshold entirely', async () => {
+      // A low device boost-trigger threshold (e.g. 400ppm) must not affect the HomeKit alert —
+      // that's a separate, plugin-configured concern (co2AlertPpm), not something read from the
+      // device. getCo2Threshold isn't even part of fakeClient's defaults; if the plugin still
+      // called it, this would throw instead of resolving normal.
+      harness = await build()
       const co2Service = harness.accessory.getServiceById(FakeServiceType.CarbonDioxideSensor, 'co2')!
       const detected = co2Service.getCharacteristic(FakeCharacteristic.CarbonDioxideDetected)
       await expect(detected.triggerGet()).resolves.toBe(FakeCharacteristic.CarbonDioxideDetected.CO2_LEVELS_NORMAL)
@@ -458,6 +480,39 @@ describe('ValloxAccessory', () => {
     it('surfaces a ValidationError from a poll as a warning without crashing', async () => {
       harness = await build({}, { getFilterDaysRemaining: jest.fn(async () => { throw new ValidationError('filter days remaining', 'bad value') }) })
       // Reaching here without an unhandled rejection/throw is the assertion.
+      expect(harness.instance).toBeDefined()
+    })
+  })
+
+  describe('daily time sync', () => {
+    it('syncs the unit clock once at startup by default', async () => {
+      harness = await build()
+      expect(harness.client.getDeviceTime).toHaveBeenCalledTimes(1)
+      expect(harness.client.setDeviceTime).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not sync when enableDailyTimeSync is false', async () => {
+      harness = await build({ enableDailyTimeSync: false })
+      expect(harness.client.getDeviceTime).not.toHaveBeenCalled()
+      expect(harness.client.setDeviceTime).not.toHaveBeenCalled()
+    })
+
+    it('sets the device clock to the current time', async () => {
+      const before = new Date('2026-08-31T10:00:00Z')
+      harness = await build({}, { getDeviceTime: jest.fn(async () => before) })
+      const [syncedTo] = harness.client.setDeviceTime.mock.calls[0] as [Date]
+      expect(syncedTo.getTime()).toBeGreaterThan(before.getTime())
+      expect(syncedTo.getTime()).toBeLessThan(Date.now() + 5000)
+    })
+
+    it('logs a warning but does not throw when the sync fails', async () => {
+      expect(async () => {
+        harness = await build({}, { getDeviceTime: jest.fn(async () => { throw new Error('offline') }) })
+      }).not.toThrow()
+    })
+
+    it('surfaces a ValidationError from a sync as a warning without crashing', async () => {
+      harness = await build({}, { getDeviceTime: jest.fn(async () => { throw new ValidationError('device time', 'bad value') }) })
       expect(harness.instance).toBeDefined()
     })
   })

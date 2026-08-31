@@ -34,6 +34,13 @@
         "default": 14,
         "minimum": 0
       },
+      "co2AlertPpm": {
+        "title": "CO2 alert threshold (ppm)",
+        "type": "integer",
+        "default": 1000,
+        "minimum": 0,
+        "description": "CO2 level (ppm) at which HomeKit's CarbonDioxideDetected characteristic flips to abnormal, triggering an alert on your devices. This only controls the HomeKit alert — it's independent of (and typically higher than) the unit's own auto-boost trigger threshold, which is configured on the unit itself and read via vallox.js's getCo2Threshold()."
+      },
       "enableCo2Sensor": {
         "title": "Enable CO2 sensor",
         "type": "boolean",
@@ -49,6 +56,12 @@
         "type": "boolean",
         "default": false,
         "description": "Logs temperature (and humidity, on the main accessory) to the Eve app's history graphs (Eve-only; invisible in the stock Home app) and backfills them from the unit's own on-device log at startup."
+      },
+      "enableDailyTimeSync": {
+        "title": "Enable daily clock sync",
+        "type": "boolean",
+        "default": true,
+        "description": "The unit has no RTC or NTP client, so its internal clock drifts over time. Syncs it to this computer's clock once at startup and once every 24 hours after that — keeps the weekly schedule firing at the right hour."
       }
     },
     "required": ["host"]

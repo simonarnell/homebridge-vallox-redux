@@ -15,7 +15,12 @@ import {
 } from 'vallox.js'
 import type { ValloxHomebridgePlatform } from './platform.js'
 import { attachProfileSwitches, type ProfileSwitchesController } from './profileSwitches.js'
-import { DEFAULT_FILTER_ALERT_DAYS, DEFAULT_POLL_SECONDS, type ValloxAccessoryContext } from './settings.js'
+import {
+  DEFAULT_CO2_ALERT_PPM,
+  DEFAULT_FILTER_ALERT_DAYS,
+  DEFAULT_POLL_SECONDS,
+  type ValloxAccessoryContext,
+} from './settings.js'
 
 /** Centikelvin → Celsius, matching vallox.js's own (private) conversion for live sensor registers. */
 function centiKelvinToCelsius(cK: number): number {
@@ -180,6 +185,7 @@ export class ValloxAccessory {
   private lastKnownCustomSupplyFanPct = 0
   private lastKnownSupplyTempSetpoint = 18
   private pollHandle?: NodeJS.Timeout
+  private timeSyncHandle?: NodeJS.Timeout
 
   constructor(
     private readonly platform: ValloxHomebridgePlatform,
@@ -241,6 +247,10 @@ export class ValloxAccessory {
     )
 
     this.startPolling()
+
+    if (this.platform.configOption('enableDailyTimeSync', true)) {
+      this.startDailyTimeSync()
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -435,6 +445,14 @@ export class ValloxAccessory {
     return service
   }
 
+  /**
+   * `CarbonDioxideDetected` uses the plugin's own `co2AlertPpm` config option, not
+   * `client.getCo2Threshold()` — that's the unit's own auto-boost trigger, tuned to kick in
+   * proactively well before air quality is actually a problem, and iOS pushes a device
+   * notification the moment this characteristic flips to abnormal. Reusing the boost trigger as
+   * the HomeKit alert threshold meant a routine, brief boost-level reading (e.g. 800ppm) paged
+   * your phone as if it were a real air-quality concern.
+   */
   private setupCo2Sensor(): Service {
     const service = this.getOrAddService(this.accessory, this.platform.Service.CarbonDioxideSensor, 'CO2', 'co2')
 
@@ -446,11 +464,9 @@ export class ValloxAccessory {
       .getCharacteristic(this.platform.Characteristic.CarbonDioxideDetected)
       .onGet(() =>
         this.wrap(async () => {
-          const [reading, threshold] = await Promise.all([
-            this.client.getSensorReadings(),
-            this.client.getCo2Threshold(),
-          ])
-          return reading.co2 >= threshold
+          const reading = await this.client.getSensorReadings()
+          const alertPpm = this.platform.configOption('co2AlertPpm', DEFAULT_CO2_ALERT_PPM)
+          return reading.co2 >= alertPpm
             ? this.platform.Characteristic.CarbonDioxideDetected.CO2_LEVELS_ABNORMAL
             : this.platform.Characteristic.CarbonDioxideDetected.CO2_LEVELS_NORMAL
         }),
@@ -605,11 +621,10 @@ export class ValloxAccessory {
 
   private async pollOnce(): Promise<void> {
     try {
-      const [powered, profile, readings, co2Threshold, filterDays, criticalFault] = await Promise.all([
+      const [powered, profile, readings, filterDays, criticalFault] = await Promise.all([
         this.client.isPoweredOn(),
         this.client.getProfile(),
         this.client.getSensorReadings(),
-        this.client.getCo2Threshold(),
         this.client.getFilterDaysRemaining(),
         this.client.getCriticalFaultActive(),
       ])
@@ -672,10 +687,11 @@ export class ValloxAccessory {
       )
 
       if (this.co2Service) {
+        const alertPpm = this.platform.configOption('co2AlertPpm', DEFAULT_CO2_ALERT_PPM)
         this.co2Service.updateCharacteristic(this.platform.Characteristic.CarbonDioxideLevel, readings.co2)
         this.co2Service.updateCharacteristic(
           this.platform.Characteristic.CarbonDioxideDetected,
-          readings.co2 >= co2Threshold
+          readings.co2 >= alertPpm
             ? this.platform.Characteristic.CarbonDioxideDetected.CO2_LEVELS_ABNORMAL
             : this.platform.Characteristic.CarbonDioxideDetected.CO2_LEVELS_NORMAL,
         )
@@ -709,6 +725,43 @@ export class ValloxAccessory {
         )
       } else {
         this.platform.log.warn('Vallox poll failed (will retry next interval):', (err as Error).message)
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Daily clock sync
+  // ---------------------------------------------------------------------
+
+  /**
+   * The unit has no RTC or NTP client — its internal clock free-runs off its own oscillator and
+   * drifts over time, which throws off the weekly schedule (it fires by the unit's own idea of
+   * the current hour). Syncs once at startup and once every 24h after that, to this computer's
+   * clock (itself assumed to be NTP-synced, which is true for virtually every modern OS).
+   */
+  private startDailyTimeSync(): void {
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000
+    this.timeSyncHandle = setInterval(() => void this.syncDeviceTime(), ONE_DAY_MS)
+    void this.syncDeviceTime()
+  }
+
+  private async syncDeviceTime(): Promise<void> {
+    try {
+      const before = await this.client.getDeviceTime()
+      const now = new Date()
+      await this.client.setDeviceTime(now)
+      const driftSeconds = Math.round((now.getTime() - before.getTime()) / 1000)
+      this.platform.log.info(
+        `Synced Vallox unit clock (was ${driftSeconds >= 0 ? 'behind' : 'ahead'} by ${Math.abs(driftSeconds)}s)`,
+      )
+    } catch (err) {
+      if (err instanceof ValidationError) {
+        this.platform.log.warn(
+          'Vallox clock sync got implausible data from the unit (possible firmware/protocol issue), will retry next interval:',
+          err.message,
+        )
+      } else {
+        this.platform.log.warn('Vallox clock sync failed (will retry next interval):', (err as Error).message)
       }
     }
   }

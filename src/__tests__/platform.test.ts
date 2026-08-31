@@ -30,7 +30,6 @@ function defaultFakeClientImpl(): Record<string, unknown> {
       humidity: 42,
       co2: 650,
     })),
-    getCo2Threshold: jest.fn(async () => 900),
     getFilterDaysRemaining: jest.fn(async () => 100),
     getHomeFanSpeed: jest.fn(async () => 50),
     getAwayFanSpeed: jest.fn(async () => 30),
@@ -42,6 +41,8 @@ function defaultFakeClientImpl(): Record<string, unknown> {
     clearTimedModes: jest.fn(async () => {}),
     getCriticalFaultActive: jest.fn(async () => false),
     getFaults: jest.fn(async () => []),
+    getDeviceTime: jest.fn(async () => new Date()),
+    setDeviceTime: jest.fn(async () => {}),
   }
 }
 

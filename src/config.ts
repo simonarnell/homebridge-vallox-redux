@@ -13,9 +13,11 @@ const configSchema: JSONSchemaType<ValloxPlatformConfig> = {
     port: { type: 'integer', minimum: 1, maximum: 65535, nullable: true },
     pollingIntervalSeconds: { type: 'integer', minimum: 5, nullable: true },
     filterAlertDays: { type: 'integer', minimum: 0, nullable: true },
+    co2AlertPpm: { type: 'integer', minimum: 0, nullable: true },
     enableCo2Sensor: { type: 'boolean', nullable: true },
     enableHumiditySensor: { type: 'boolean', nullable: true },
     enableEveHistory: { type: 'boolean', nullable: true },
+    enableDailyTimeSync: { type: 'boolean', nullable: true },
   },
   required: ['platform', 'host'],
   // Homebridge/end users may add unrelated keys (comments, IDs Homebridge itself injects); only
