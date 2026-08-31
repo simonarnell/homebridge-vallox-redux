@@ -1,11 +1,11 @@
 name: Publish to npm
 
-# The `release: published` trigger is deliberately not enabled yet. This package has never been
-# published, and npm Trusted Publishing is configured on an *existing* package's Settings page —
-# there's nothing to attach it to until a first `npm publish` happens manually. Publish v0.1.0
-# by hand (with your own 2FA), configure the Trusted Publisher on npmjs.com the same way as
-# vallox.js, then add the `release: types: [published]` trigger back for v0.1.1 onward.
+# Triggered by publishing a GitHub Release. Bump the version in package.json
+# (and commit it) before creating the release — npm publishes whatever
+# version package.json has, not the release tag.
 on:
+  release:
+    types: [published]
   workflow_dispatch: {}
 
 permissions:
