@@ -11,7 +11,8 @@ Named "Redux" to sit alongside the existing [`homebridge-vallox`](https://github
 | Fan power + speed                      | ✅ | ✅ |
 | Temperature sensors (4x)               | ✅ | ✅ |
 | Humidity sensor                        | ✅ | ✅ |
-| CO2 sensor                             | ✅ | ❌ |
+| CO2 sensor                             | ✅ *(configurable alert threshold)* | ❌ |
+| Supply-air temperature setpoint control | ✅ *(Thermostat accessory)* | ❌ |
 | Filter change indication               | ✅ *(configurable threshold)* | ❌ |
 | Profile switches                       | Home / Away / Boost / Custom / Automatic | Away / Boost / Fireplace |
 | Multiple units on one Homebridge       | ✅ *(uncommon for MVHR, but supported)* | ❌ *(`singular` platform)* |
@@ -21,6 +22,7 @@ Named "Redux" to sit alongside the existing [`homebridge-vallox`](https://github
 | Auto-detected model/firmware           | ✅ *(read from the unit, used as the default accessory name)* | ❌ |
 | Independent per-sensor room placement  | ✅ *(Supply/Outdoor/Exhaust are separate accessories)* | ❌ |
 | Eve app history graphs                 | ✅ | ❌ |
+| Daily clock sync (unit has no RTC/NTP) | ✅ | ❌ |
 
 Nothing here is a knock on the original, it's a solid, minimal plugin. Redux exists because it targets a slightly wider slice of what a single unit and HAP can expose: more sensors, validated config, richer error handling, and Eve history, depth rather than breadth across many units, since most homes only ever have one.
 
