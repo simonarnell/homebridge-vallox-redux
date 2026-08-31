@@ -1,0 +1,56 @@
+{
+  "pluginAlias": "ValloxRedux",
+  "pluginType": "platform",
+  "singular": false,
+  "headerDisplay": "Homebridge plugin for Vallox MVHR ventilation units, built on the vallox.js library.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "description": "Leave blank to use the unit's own model name (e.g. \"Vallox 110 MV\"), detected automatically at startup."
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "description": "IP address or hostname of the Vallox unit's built-in web server.",
+        "required": true
+      },
+      "port": {
+        "title": "Port",
+        "type": "integer",
+        "default": 80
+      },
+      "pollingIntervalSeconds": {
+        "title": "Polling interval (seconds)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 5
+      },
+      "filterAlertDays": {
+        "title": "Filter change alert threshold (days)",
+        "type": "integer",
+        "default": 14,
+        "minimum": 0
+      },
+      "enableCo2Sensor": {
+        "title": "Enable CO2 sensor",
+        "type": "boolean",
+        "default": true
+      },
+      "enableHumiditySensor": {
+        "title": "Enable humidity sensor",
+        "type": "boolean",
+        "default": true
+      },
+      "enableEveHistory": {
+        "title": "Enable Eve app history graphs",
+        "type": "boolean",
+        "default": false,
+        "description": "Logs temperature (and humidity, on the main accessory) to the Eve app's history graphs (Eve-only; invisible in the stock Home app) and backfills them from the unit's own on-device log at startup."
+      }
+    },
+    "required": ["host"]
+  }
+}

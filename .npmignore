@@ -1,0 +1,7 @@
+src/
+tsconfig.json
+tsconfig.test.json
+jest.config.js
+jest.integration.config.js
+.github/
+*.log
