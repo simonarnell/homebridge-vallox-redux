@@ -19,4 +19,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate CHANGELOG.md
-        uses: ConfiguredThings/validate-changelog-action@v2
+        uses: ConfiguredThings/validate-changelog-action@v4
