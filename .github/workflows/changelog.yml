@@ -1,0 +1,22 @@
+name: Validate Changelog
+
+on:
+  push:
+    branches: [main, master]
+    paths: ['CHANGELOG.md']
+  pull_request:
+    paths: ['CHANGELOG.md']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate CHANGELOG.md
+        uses: ConfiguredThings/validate-changelog-action@v2
