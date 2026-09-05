@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-05
+
+### Fixed
+
+- The Supply Air Setpoint `Thermostat`'s `TargetHeatingCoolingState` started at HAP-NodeJS's default value (`0`/Off), which isn't in the `validValues` this plugin restricts it to (`[HEAT]`) — logged a "not contained in valid values array" warning on every startup. Now explicitly initialized to `HEAT`.
+
 ## [0.2.0] - 2026-08-31
 
 ### Added
@@ -41,6 +47,7 @@ Initial release.
 - Critical fault logging to the Homebridge log, and a HomeKit-visible `StatusFault` indicator on the main Fan service.
 - Support for multiple units on one Homebridge instance.
 
-[Unreleased]: https://github.com/simonarnell/homebridge-vallox-redux/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/simonarnell/homebridge-vallox-redux/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/simonarnell/homebridge-vallox-redux/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/simonarnell/homebridge-vallox-redux/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/simonarnell/homebridge-vallox-redux/releases/tag/v0.1.0

@@ -528,6 +528,10 @@ export class ValloxAccessory {
       .getCharacteristic(this.platform.Characteristic.TargetHeatingCoolingState)
       .setProps({ validValues: [this.platform.Characteristic.TargetHeatingCoolingState.HEAT] })
       .onGet(() => this.platform.Characteristic.TargetHeatingCoolingState.HEAT)
+      // HAP-NodeJS's own default initial value (0/OFF) isn't in validValues above, and would
+      // otherwise log a "not contained in valid values array" warning at every startup before
+      // onGet ever runs. Force it to HEAT immediately instead of waiting for a poll/read.
+      .updateValue(this.platform.Characteristic.TargetHeatingCoolingState.HEAT)
 
     service
       .getCharacteristic(this.platform.Characteristic.CurrentHeatingCoolingState)

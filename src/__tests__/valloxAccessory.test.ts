@@ -307,6 +307,18 @@ describe('ValloxAccessory', () => {
         .getCharacteristic(FakeCharacteristic.TargetHeatingCoolingState)
       await expect(state.triggerGet()).resolves.toBe(FakeCharacteristic.TargetHeatingCoolingState.HEAT)
     })
+
+    it('TargetHeatingCoolingState starts at HEAT rather than HAP-NodeJS\'s default OFF', async () => {
+      // Real HAP-NodeJS logs "value 0 is not contained in valid values array" at startup if the
+      // stored value is never pushed past its default (0/OFF) before the restricted validValues
+      // ([HEAT]) takes effect. The fake doesn't validate this itself, so this checks the plugin
+      // actually calls updateValue rather than relying on onGet alone.
+      harness = await build()
+      const state = harness.supply
+        .getServiceById(FakeServiceType.Thermostat, 'supply-setpoint')!
+        .getCharacteristic(FakeCharacteristic.TargetHeatingCoolingState)
+      expect(state.value).toBe(FakeCharacteristic.TargetHeatingCoolingState.HEAT)
+    })
   })
 
   describe('fault indication', () => {

@@ -107,6 +107,11 @@ export class FakeCharacteristicInstance {
     return this
   }
 
+  updateValue(value: unknown): this {
+    this.value = value
+    return this
+  }
+
   /** Simulates HomeKit reading this characteristic. */
   async triggerGet(): Promise<unknown> {
     if (!this.#getHandler) throw new Error(`No onGet handler registered for ${this.def.name}`)

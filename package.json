@@ -1,7 +1,7 @@
 {
   "name": "homebridge-vallox-redux",
   "displayName": "Vallox Redux",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Homebridge plugin for Vallox MVHR ventilation units (via vallox.js)",
   "type": "module",
   "main": "dist/index.js",
